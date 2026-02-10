@@ -1,251 +1,418 @@
 /**
- * OpenClaw Unreal Plugin Extension
- * Provides tools for AI-assisted Unreal Engine development
+ * OpenClaw Unreal Plugin
+ * Connects Unreal Engine 5.x Editor to OpenClaw AI assistant via HTTP
  */
 
-import type { OpenClawPlugin, ToolCallResult } from "openclaw";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 interface UnrealSession {
   sessionId: string;
+  registeredAt: number;
+  lastHeartbeat: number;
   projectName: string;
-  lastSeen: number;
+  engineVersion: string;
+  platform: string;
+  toolCount: number;
+  pendingCommands: Array<{
+    toolCallId: string;
+    tool: string;
+    arguments: Record<string, any>;
+    createdAt: number;
+  }>;
+  results: Map<string, any>;
 }
 
-let sessions: Map<string, UnrealSession> = new Map();
+// Store active Unreal sessions
+const sessions = new Map<string, UnrealSession>();
 
-const TOOLS = [
-  // Level tools
-  "level.getCurrent",
-  "level.list",
-  "level.open",
-  "level.save",
-  // Actor tools
-  "actor.find",
-  "actor.getAll",
-  "actor.create",
-  "actor.delete",
-  "actor.destroy",
-  "actor.getData",
-  "actor.setProperty",
-  // Transform tools
-  "transform.getPosition",
-  "transform.setPosition",
-  "transform.getRotation",
-  "transform.setRotation",
-  "transform.getScale",
-  "transform.setScale",
-  // Component tools
-  "component.get",
-  "component.add",
-  "component.remove",
-  // Editor tools
-  "editor.play",
-  "editor.stop",
-  "editor.pause",
-  "editor.resume",
-  "editor.getState",
-  // Debug tools
-  "debug.hierarchy",
-  "debug.screenshot",
-  "debug.log",
-  // Input tools
-  "input.simulateKey",
-  "input.simulateMouse",
-  "input.simulateAxis",
-  // Asset tools
-  "asset.list",
-  "asset.import",
-  // Console tools
-  "console.execute",
-  "console.getLogs",
-  // Blueprint tools
-  "blueprint.list",
-  "blueprint.open",
-] as const;
-
-type ToolName = (typeof TOOLS)[number];
-
-function getToolDescription(tool: ToolName): string {
-  const descriptions: Record<ToolName, string> = {
-    "level.getCurrent": "Get current level info",
-    "level.list": "List all levels in project",
-    "level.open": "Open a level by path",
-    "level.save": "Save current level",
-    "actor.find": "Find actor by name",
-    "actor.getAll": "Get all actors in level",
-    "actor.create": "Create new actor",
-    "actor.delete": "Delete actor by name",
-    "actor.destroy": "Delete actor by name (alias)",
-    "actor.getData": "Get detailed actor data",
-    "actor.setProperty": "Set actor property",
-    "transform.getPosition": "Get actor position",
-    "transform.setPosition": "Set actor position",
-    "transform.getRotation": "Get actor rotation",
-    "transform.setRotation": "Set actor rotation",
-    "transform.getScale": "Get actor scale",
-    "transform.setScale": "Set actor scale",
-    "component.get": "Get actor components",
-    "component.add": "Add component to actor",
-    "component.remove": "Remove component from actor",
-    "editor.play": "Start Play in Editor (PIE)",
-    "editor.stop": "Stop Play in Editor",
-    "editor.pause": "Pause game execution",
-    "editor.resume": "Resume game execution",
-    "editor.getState": "Get editor state (playing/editing)",
-    "debug.hierarchy": "Get world actor hierarchy",
-    "debug.screenshot": "Take screenshot",
-    "debug.log": "Log message to output",
-    "input.simulateKey": "Simulate keyboard input",
-    "input.simulateMouse": "Simulate mouse input",
-    "input.simulateAxis": "Simulate axis input",
-    "asset.list": "List assets in path",
-    "asset.import": "Import external asset",
-    "console.execute": "Execute console command",
-    "console.getLogs": "Get output log messages",
-    "blueprint.list": "List blueprints in project",
-    "blueprint.open": "Open blueprint in editor",
-  };
-  return descriptions[tool] || tool;
+// Generate unique ID
+function generateId(): string {
+  return `unreal_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-function getToolParameters(tool: ToolName): Record<string, any> {
-  const params: Record<string, Record<string, any>> = {
-    "level.open": {
-      path: { type: "string", description: "Level asset path", required: true },
-    },
-    "actor.find": {
-      name: { type: "string", description: "Actor name or label", required: true },
-    },
-    "actor.create": {
-      type: { type: "string", description: "Actor type (Cube, PointLight, Camera, etc.)" },
-      name: { type: "string", description: "Actor label" },
-      x: { type: "number", description: "X position" },
-      y: { type: "number", description: "Y position" },
-      z: { type: "number", description: "Z position" },
-    },
-    "actor.delete": {
-      name: { type: "string", description: "Actor name", required: true },
-    },
-    "actor.destroy": {
-      name: { type: "string", description: "Actor name", required: true },
-    },
-    "actor.getData": {
-      name: { type: "string", description: "Actor name", required: true },
-    },
-    "transform.getPosition": {
-      name: { type: "string", description: "Actor name", required: true },
-    },
-    "transform.setPosition": {
-      name: { type: "string", description: "Actor name", required: true },
-      x: { type: "number", description: "X position" },
-      y: { type: "number", description: "Y position" },
-      z: { type: "number", description: "Z position" },
-    },
-    "transform.getRotation": {
-      name: { type: "string", description: "Actor name", required: true },
-    },
-    "transform.setRotation": {
-      name: { type: "string", description: "Actor name", required: true },
-      pitch: { type: "number", description: "Pitch (degrees)" },
-      yaw: { type: "number", description: "Yaw (degrees)" },
-      roll: { type: "number", description: "Roll (degrees)" },
-    },
-    "transform.getScale": {
-      name: { type: "string", description: "Actor name", required: true },
-    },
-    "transform.setScale": {
-      name: { type: "string", description: "Actor name", required: true },
-      x: { type: "number", description: "X scale" },
-      y: { type: "number", description: "Y scale" },
-      z: { type: "number", description: "Z scale" },
-    },
-    "component.get": {
-      actor: { type: "string", description: "Actor name", required: true },
-      component: { type: "string", description: "Component name filter" },
-    },
-    "debug.hierarchy": {
-      depth: { type: "number", description: "Max depth to traverse" },
-    },
-    "debug.screenshot": {
-      filename: { type: "string", description: "Screenshot filename" },
-    },
-    "debug.log": {
-      message: { type: "string", description: "Message to log", required: true },
-      level: { type: "string", description: "Log level (log/warning/error)" },
-    },
-    "input.simulateKey": {
-      key: { type: "string", description: "Key name (W, A, S, D, Space, etc.)", required: true },
-      pressed: { type: "boolean", description: "True for press, false for release" },
-    },
-    "input.simulateMouse": {
-      action: { type: "string", description: "Mouse action (click/move/scroll)", required: true },
-      x: { type: "number", description: "X coordinate" },
-      y: { type: "number", description: "Y coordinate" },
-      button: { type: "string", description: "Mouse button (left/right/middle)" },
-    },
-    "input.simulateAxis": {
-      axis: { type: "string", description: "Axis name", required: true },
-      value: { type: "number", description: "Axis value (-1 to 1)", required: true },
-    },
-    "asset.list": {
-      path: { type: "string", description: "Asset path (default: /Game)" },
-      type: { type: "string", description: "Asset type filter" },
-    },
-    "console.execute": {
-      command: { type: "string", description: "Console command", required: true },
-    },
-    "blueprint.list": {
-      path: { type: "string", description: "Path to search (default: /Game)" },
-    },
-    "blueprint.open": {
-      path: { type: "string", description: "Blueprint asset path", required: true },
-    },
-  };
-  return params[tool] || {};
-}
-
-const plugin: OpenClawPlugin = {
-  name: "unreal",
-  version: "1.0.0",
-
-  tools: TOOLS.map((tool) => ({
-    name: tool,
-    description: getToolDescription(tool),
-    parameters: getToolParameters(tool),
-  })),
-
-  async execute(toolCallId: string, args: Record<string, any>): Promise<ToolCallResult> {
-    const tool = args.tool as ToolName;
-
-    // Forward to Unreal via HTTP
-    try {
-      const response = await fetch("http://127.0.0.1:27742/api/plugin/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tool,
-          params: args,
-          toolCallId,
-        }),
-      });
-
-      if (!response.ok) {
-        return {
-          content: [{ type: "text", text: `Unreal connection error: ${response.status}` }],
-          isError: true,
-        };
-      }
-
-      const result = await response.json();
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    } catch (error) {
-      return {
-        content: [{ type: "text", text: `Unreal plugin not connected: ${error}` }],
-        isError: true,
-      };
+// Clean up stale sessions (no heartbeat for 2 minutes)
+function cleanupStaleSessions() {
+  const now = Date.now();
+  const staleThreshold = 120000; // 2 minutes
+  
+  for (const [id, session] of sessions) {
+    if (now - session.lastHeartbeat > staleThreshold) {
+      sessions.delete(id);
     }
+  }
+}
+
+// Read JSON body from request
+async function readJsonBody(req: IncomingMessage, maxBytes = 1024 * 1024): Promise<any> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  
+  return new Promise((resolve, reject) => {
+    req.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error("Payload too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    
+    req.on("end", () => {
+      try {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        if (!raw.trim()) {
+          resolve({});
+          return;
+        }
+        resolve(JSON.parse(raw));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    
+    req.on("error", reject);
+  });
+}
+
+// Send JSON response
+function sendJson(res: ServerResponse, status: number, data: any) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.end(JSON.stringify(data));
+}
+
+// HTTP Handler for Unreal endpoints
+async function handleUnrealHttpRequest(
+  req: IncomingMessage,
+  res: ServerResponse
+): Promise<boolean> {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const path = url.pathname;
+  
+  // Only handle /unreal/* paths
+  if (!path.startsWith("/unreal/")) {
+    return false;
+  }
+  
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
+  
+  const endpoint = path.replace("/unreal/", "");
+  
+  try {
+    switch (endpoint) {
+      case "register": {
+        if (req.method !== "POST") {
+          sendJson(res, 405, { error: "Method not allowed" });
+          return true;
+        }
+        
+        const body = await readJsonBody(req);
+        const { project, version, platform, tools } = body;
+        
+        const sessionId = generateId();
+        const session: UnrealSession = {
+          sessionId,
+          registeredAt: Date.now(),
+          lastHeartbeat: Date.now(),
+          projectName: project || "Unknown",
+          engineVersion: version || "Unknown",
+          platform: platform || "UnrealEditor",
+          toolCount: tools || 0,
+          pendingCommands: [],
+          results: new Map(),
+        };
+        
+        sessions.set(sessionId, session);
+        console.log(`[Unreal] Registered: ${project} (UE ${version}) - Session: ${sessionId}`);
+        
+        sendJson(res, 200, { sessionId, status: "connected" });
+        return true;
+      }
+      
+      case "heartbeat": {
+        if (req.method !== "POST") {
+          sendJson(res, 405, { error: "Method not allowed" });
+          return true;
+        }
+        
+        const body = await readJsonBody(req);
+        const { sessionId } = body;
+        
+        const session = sessions.get(sessionId);
+        if (!session) {
+          sendJson(res, 404, { error: "Session not found" });
+          return true;
+        }
+        
+        session.lastHeartbeat = Date.now();
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+      
+      case "poll": {
+        const sessionId = url.searchParams.get("sessionId");
+        
+        const session = sessions.get(sessionId || "");
+        if (!session) {
+          sendJson(res, 404, { error: "Session not found" });
+          return true;
+        }
+        
+        session.lastHeartbeat = Date.now();
+        
+        // Return next pending command if any
+        if (session.pendingCommands.length > 0) {
+          const command = session.pendingCommands.shift()!;
+          sendJson(res, 200, command);
+        } else {
+          // No content
+          res.statusCode = 204;
+          res.end();
+        }
+        return true;
+      }
+      
+      case "result": {
+        if (req.method !== "POST") {
+          sendJson(res, 405, { error: "Method not allowed" });
+          return true;
+        }
+        
+        const body = await readJsonBody(req);
+        const { sessionId, toolCallId, result } = body;
+        
+        const session = sessions.get(sessionId);
+        if (!session) {
+          sendJson(res, 404, { error: "Session not found" });
+          return true;
+        }
+        
+        session.results.set(toolCallId, result);
+        console.log(`[Unreal] Tool result received for: ${toolCallId}`);
+        
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+      
+      case "status": {
+        const activeSessions = Array.from(sessions.values()).map(s => ({
+          sessionId: s.sessionId,
+          project: s.projectName,
+          version: s.engineVersion,
+          platform: s.platform,
+          connectedAt: new Date(s.registeredAt).toISOString(),
+          lastSeen: new Date(s.lastHeartbeat).toISOString(),
+          pendingCommands: s.pendingCommands.length,
+        }));
+        
+        sendJson(res, 200, {
+          enabled: true,
+          sessions: activeSessions,
+          sessionCount: activeSessions.length,
+        });
+        return true;
+      }
+      
+      default:
+        sendJson(res, 404, { error: "Unknown endpoint" });
+        return true;
+    }
+  } catch (err: any) {
+    console.error("[Unreal] HTTP error:", err);
+    sendJson(res, 500, { error: err.message });
+    return true;
+  }
+}
+
+const plugin = {
+  id: "unreal",
+  name: "Unreal Plugin",
+  description: "Connect Unreal Engine 5.x Editor to OpenClaw AI assistant",
+  
+  register(api: OpenClawPluginApi) {
+    const logger = api.logger;
+    
+    // Cleanup timer
+    setInterval(cleanupStaleSessions, 30000);
+    
+    // Register HTTP handler
+    api.registerHttpHandler(handleUnrealHttpRequest);
+    
+    // ===== Agent Tools =====
+    
+    // Tool: Execute an Unreal command
+    api.registerTool({
+      name: "unreal_execute",
+      description: "Execute a tool in the connected Unreal Editor. Available tools: level.getCurrent, level.list, level.open, level.save, actor.find, actor.getAll, actor.create, actor.delete, actor.getData, actor.setProperty, transform.getPosition, transform.setPosition, transform.getRotation, transform.setRotation, transform.getScale, transform.setScale, component.get, component.add, component.remove, editor.play, editor.stop, editor.pause, editor.resume, editor.getState, debug.hierarchy, debug.screenshot, debug.log, input.simulateKey, input.simulateMouse, input.simulateAxis, asset.list, asset.import, console.execute, console.getLogs, blueprint.list, blueprint.open, and more.",
+      parameters: {
+        type: "object" as const,
+        properties: {
+          tool: { type: "string" as const, description: "The Unreal tool to execute (e.g., 'debug.hierarchy', 'actor.find')" },
+          parameters: { type: "object" as const, description: "Parameters for the tool (varies by tool)" },
+          sessionId: { type: "string" as const, description: "Optional: specific Unreal session ID" },
+        },
+        required: ["tool"] as const,
+      },
+      execute: async (toolCallId: string, args: any) => {
+        // Helper to format result for OpenClaw
+        const jsonResult = (payload: any) => ({
+          content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+          details: payload,
+        });
+        
+        // Extract parameters
+        const tool = args?.tool;
+        const parameters = args?.parameters;
+        const sessionId = args?.sessionId;
+        
+        if (!tool) {
+          return jsonResult({
+            success: false,
+            error: "Missing 'tool' parameter. Specify which Unreal tool to execute (e.g., 'debug.hierarchy', 'actor.find').",
+          });
+        }
+        
+        // Find session
+        let session: UnrealSession | undefined;
+        
+        if (sessionId) {
+          session = sessions.get(sessionId);
+        } else {
+          // Use first active session
+          const firstSession = sessions.values().next();
+          session = firstSession.done ? undefined : firstSession.value;
+        }
+        
+        if (!session) {
+          return jsonResult({
+            success: false,
+            error: "No Unreal session connected. Make sure Unreal Editor is running with OpenClaw plugin enabled (Window > OpenClaw).",
+          });
+        }
+        
+        // Create command
+        const requestId = generateId();
+        session.pendingCommands.push({
+          toolCallId: requestId,
+          tool,
+          arguments: parameters || {},
+          createdAt: Date.now(),
+        });
+        
+        logger.info(`[Unreal] Queued command: ${tool} (request: ${requestId})`);
+        
+        // Wait for result (with timeout)
+        const timeout = 60000; // 60 seconds
+        const startTime = Date.now();
+        
+        while (Date.now() - startTime < timeout) {
+          if (session.results.has(requestId)) {
+            const result = session.results.get(requestId);
+            session.results.delete(requestId);
+            
+            return jsonResult({
+              success: true,
+              result,
+            });
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        return jsonResult({
+          success: false,
+          error: "Timeout waiting for Unreal response. Make sure the OpenClaw plugin is enabled in Unreal Editor (Window > OpenClaw).",
+        });
+      },
+    });
+    
+    // Tool: List Unreal sessions
+    api.registerTool({
+      name: "unreal_sessions",
+      description: "List all connected Unreal Editor sessions",
+      parameters: {
+        type: "object" as const,
+        properties: {
+          _dummy: { type: "string" as const, description: "Unused parameter" },
+        },
+        required: [] as const,
+      },
+      execute: async (_toolCallId: string, _args: any) => {
+        const activeSessions = Array.from(sessions.values()).map(s => ({
+          sessionId: s.sessionId,
+          project: s.projectName,
+          version: s.engineVersion,
+          platform: s.platform,
+          tools: s.toolCount,
+        }));
+        
+        const payload = {
+          success: true,
+          sessions: activeSessions,
+          count: activeSessions.length,
+        };
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+          details: payload,
+        };
+      },
+    });
+    
+    // ===== CLI Commands =====
+    
+    api.registerCli(
+      ({ program }) => {
+        const unrealCmd = program
+          .command("unreal")
+          .description("Unreal Plugin commands");
+        
+        unrealCmd
+          .command("status")
+          .description("Show Unreal connection status")
+          .action(() => {
+            console.log("\n🎮 Unreal Plugin Status\n");
+            
+            if (sessions.size === 0) {
+              console.log("  No Unreal sessions connected.\n");
+              console.log("  To connect Unreal:");
+              console.log("  1. Copy OpenClaw plugin to Plugins/ folder");
+              console.log("  2. Enable in Edit > Plugins > OpenClaw");
+              console.log("  3. Open Window > OpenClaw to connect\n");
+              return;
+            }
+            
+            for (const [id, session] of sessions) {
+              const age = Math.round((Date.now() - session.registeredAt) / 1000);
+              const lastSeen = Math.round((Date.now() - session.lastHeartbeat) / 1000);
+              
+              console.log(`  ✅ ${session.projectName}`);
+              console.log(`     Engine: UE ${session.engineVersion}`);
+              console.log(`     Platform: ${session.platform}`);
+              console.log(`     Session: ${id}`);
+              console.log(`     Connected: ${age}s ago`);
+              console.log(`     Last seen: ${lastSeen}s ago`);
+              console.log(`     Pending: ${session.pendingCommands.length} commands\n`);
+            }
+          });
+      },
+      { commands: ["unreal"] }
+    );
+    
+    logger.info("[Unreal] Plugin loaded - HTTP endpoints at /unreal/*");
   },
 };
 

@@ -1,9 +1,12 @@
 {
-  "name": "openclaw-unreal-extension",
-  "version": "0.9.1",
-  "description": "OpenClaw extension for Unreal Engine integration",
+  "name": "unreal",
+  "version": "0.9.2",
+  "description": "OpenClaw Unreal Plugin - Connect UE5 to OpenClaw AI",
   "main": "index.ts",
   "type": "module",
   "author": "OpenClaw",
-  "license": "MIT"
+  "license": "MIT",
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
 }
