@@ -104,6 +104,21 @@ Create `openclaw.json` in project root:
 - Check editor is not in PIE when modifying actors
 - Verify actor names match exactly
 
+## 🔐 Security: Model Invocation Setting
+
+When publishing to ClawHub, you can configure `disableModelInvocation`:
+
+| Setting | AI Auto-Invoke | User Explicit Request |
+|---------|---------------|----------------------|
+| `false` (default) | ✅ Allowed | ✅ Allowed |
+| `true` | ❌ Blocked | ✅ Allowed |
+
+### Recommendation: **`true`**
+
+**Reason:** During Unreal development, it's useful for AI to autonomously perform supporting tasks like checking actor hierarchy, taking screenshots, and inspecting components.
+
+**When to use `true`:** For sensitive tools (payments, deletions, message sending, etc.)
+
 ## License
 
 MIT License - See LICENSE file

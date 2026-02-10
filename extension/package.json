@@ -1,6 +1,6 @@
 {
   "name": "openclaw-unreal-extension",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "OpenClaw extension for Unreal Engine integration",
   "main": "index.ts",
   "type": "module",
