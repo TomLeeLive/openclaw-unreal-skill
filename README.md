@@ -10,7 +10,7 @@ This software is in **beta**. Use at your own risk.
 - Test in a separate project first
 - The authors are not responsible for any data loss or project corruption
 
-See [LICENSE](LICENSE) for full terms.
+See [LICENSE](LICENSE.md) for full terms.
 
 ## Installation
 
