@@ -1,4 +1,6 @@
 # OpenClaw Unreal Skill
+version: 0.9.6
+
 
 Control Unreal Editor via OpenClaw AI assistant.
 
