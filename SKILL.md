@@ -1,186 +1,87 @@
-# OpenClaw Unreal Skill
-version: 0.9.6
+# OpenClaw Unreal Plugin
 
+MCP skill for controlling Unreal Engine Editor via OpenClaw.
 
-Control Unreal Editor via OpenClaw AI assistant.
+## Connection
 
-## Overview
+The plugin runs an MCP server inside the Unreal Editor. OpenClaw Gateway connects to it automatically when the editor is running with the plugin enabled.
 
-This skill enables AI-assisted Unreal Engine development through the OpenClaw Unreal Plugin. The plugin communicates with OpenClaw Gateway via HTTP polling (`/unreal/*` endpoints).
+## Editor Panel
 
-## Architecture
+**Window → OpenClaw Unreal Plugin** — opens a dockable tab with:
+- Connection status indicator
+- MCP server info (address, protocol)
+- Connect / Disconnect buttons
+- Live log of tool calls and messages
 
-```
-┌──────────────────┐     HTTP      ┌─────────────────────┐
-│  OpenClaw        │ ←──────────→  │  Unreal Editor      │
-│  Gateway:18789   │  /unreal/*    │  (C++ Plugin)       │
-└──────────────────┘               └─────────────────────┘
-         ↑
-         │ Extension
-┌──────────────────┐
-│  extension/      │
-│  index.ts        │
-└──────────────────┘
-```
+## Tools
 
-## Prerequisites
+### Level
+- `level.getCurrent` — current level name
+- `level.list` — all levels in project
+- `level.open` — open level by name
+- `level.save` — save current level
 
-1. Unreal Engine 5.x project
-2. OpenClaw Unreal Plugin installed in project
-3. OpenClaw Gateway running (default port: 18789)
-
-## Installation
-
-### Plugin Installation
-
-1. Copy `openclaw-unreal-plugin` folder to your project's `Plugins` directory
-2. Restart Unreal Editor
-3. Enable the plugin in Edit → Plugins → OpenClaw
-4. Open Window → OpenClaw to see connection status
-
-### Skill Installation
-
-```bash
-# Copy skill to OpenClaw workspace
-cp -r openclaw-unreal-skill ~/.openclaw/workspace/skills/unreal-plugin
-```
-
-## Available Tools
-
-### Level Management
-- `level.getCurrent` - Get current level info
-- `level.list` - List all levels
-- `level.open` - Open level by path
-- `level.save` - Save current level
-
-### Actor Manipulation
-- `actor.find` - Find actor by name
-- `actor.getAll` - Get all actors
-- `actor.create` - Spawn new actor (Cube, PointLight, Camera, etc.)
-- `actor.delete` / `actor.destroy` - Remove actor
-- `actor.getData` - Get actor details
-- `actor.setProperty` - Modify actor property
+### Actor
+- `actor.find` — find by name/class
+- `actor.getAll` — list all actors
+- `actor.create` — create actors: StaticMeshActor (Cube, Sphere, Cylinder, Cone), PointLight, Camera
+- `actor.delete` — delete by name
+- `actor.getData` — detailed actor info
+- `actor.setProperty` — set properties via UE reflection system
 
 ### Transform
-- `transform.getPosition` / `setPosition`
-- `transform.getRotation` / `setRotation`
-- `transform.getScale` / `setScale`
+- `transform.getPosition` / `transform.setPosition`
+- `transform.getRotation` / `transform.setRotation`
+- `transform.getScale` / `transform.setScale`
+
+> Transform tools require a valid RootComponent (works on StaticMeshActor, PointLight, etc. — not on bare Actor).
 
 ### Component
-- `component.get` - Get actor components
-- `component.add` - Add component
-- `component.remove` - Remove component
+- `component.get` — get component data
+- `component.add` — add component (not yet implemented)
+- `component.remove` — remove component (not yet implemented)
 
-### Editor Control
-- `editor.play` - Start PIE (Play In Editor)
-- `editor.stop` - Stop PIE
-- `editor.pause` / `resume` - Pause/resume gameplay
-- `editor.getState` - Check if playing/editing
+### Editor
+- `editor.play` — start PIE (uses RequestPlaySession)
+- `editor.stop` — stop PIE
+- `editor.pause` / `editor.resume` — pause/resume PIE
+- `editor.getState` — current editor state
 
 ### Debug
-- `debug.hierarchy` - World outliner tree
-- `debug.screenshot` - Capture viewport
-- `debug.log` - Output log message
+- `debug.hierarchy` — actor hierarchy tree
+- `debug.screenshot` — capture editor viewport
+- `debug.log` — write to output log
 
-### Input Simulation
-- `input.simulateKey` - Keyboard input (W, A, S, D, Space, etc.)
-- `input.simulateMouse` - Mouse click/move/scroll
-- `input.simulateAxis` - Gamepad/axis input
+### Input
+- `input.simulateKey` — simulate key press
+- `input.simulateMouse` — simulate mouse
+- `input.simulateAxis` — simulate axis
 
-### Assets
-- `asset.list` - Browse content browser
-- `asset.import` - Import external asset
+### Asset
+- `asset.list` — list assets at path
+- `asset.import` — import asset (not yet implemented)
 
 ### Console
-- `console.execute` - Run console command
-- `console.getLogs` - Get output log messages
+- `console.execute` — run console command
+- `console.getLogs` — read project log file; params: `count` (number of lines), `filter` (text filter)
 
 ### Blueprint
-- `blueprint.list` - List blueprints in project
-- `blueprint.open` - Open blueprint in editor
-
-## Example Usage
-
-```
-User: Create a cube at position (100, 200, 50)
-AI: [Uses unreal_execute tool="actor.create" parameters={type:"Cube", x:100, y:200, z:50}]
-
-User: Move the player start to the center
-AI: [Uses unreal_execute tool="actor.find" parameters={name:"PlayerStart"}]
-    [Uses unreal_execute tool="transform.setPosition" parameters={name:"PlayerStart", x:0, y:0, z:0}]
-
-User: Take a screenshot
-AI: [Uses unreal_execute tool="debug.screenshot"]
-
-User: Start the game
-AI: [Uses unreal_execute tool="editor.play"]
-```
-
-## Configuration
-
-Create `openclaw.json` in project root (optional):
-
-```json
-{
-  "host": "127.0.0.1",
-  "port": 18789,
-  "autoConnect": true
-}
-```
-
-Or in `~/.openclaw/unreal-plugin.json` for global config.
-
-## HTTP Endpoints
-
-The extension registers these endpoints on OpenClaw Gateway:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/unreal/register` | POST | Register new session |
-| `/unreal/poll` | GET | Poll for pending commands |
-| `/unreal/heartbeat` | POST | Keep session alive |
-| `/unreal/result` | POST | Send tool execution result |
-| `/unreal/status` | GET | Get all sessions status |
+- `blueprint.list` — list blueprints
+- `blueprint.open` — open blueprint (not yet implemented)
 
 ## Troubleshooting
 
-### Plugin not connecting
-- Check Output Log for `[OpenClaw]` messages
-- Verify gateway is running: `openclaw gateway status`
-- Confirm port 18789 is accessible
-- Try Window → OpenClaw to see connection status
+### Stale binaries / plugin not loading
 
-### Session expired
-- Plugin auto-reconnects on session expiry
-- Check if gateway was restarted
-
-### Tools not working
-- Ensure plugin is enabled (Edit → Plugins)
-- Check editor is not in PIE when modifying level actors
-- Verify actor names match exactly (case-sensitive)
-
-## 🔐 Security: Model Invocation Setting
-
-When publishing to ClawHub, you can configure `disableModelInvocation`:
-
-| Setting | AI Auto-Invoke | User Explicit Request |
-|---------|---------------|----------------------|
-| `false` (default) | ✅ Allowed | ✅ Allowed |
-| `true` | ❌ Blocked | ✅ Allowed |
-
-### Recommendation: **`false`** (default)
-
-**Reason:** During Unreal development, it's useful for AI to autonomously perform supporting tasks like checking actor hierarchy, taking screenshots, and inspecting components.
-
-**When to use `true`:** For sensitive tools (payments, deletions, message sending, etc.)
-
-## CLI Commands
+Clear the build cache and restart the editor:
 
 ```bash
-# Check Unreal connection status
-openclaw unreal status
+rm -rf YourProject/Plugins/OpenClaw/Binaries YourProject/Plugins/OpenClaw/Intermediate
 ```
 
-## License
+### Connection issues
 
-MIT License - See LICENSE file
+- Ensure OpenClaw Gateway is running: `openclaw gateway status`
+- Check the Editor Panel log for errors
+- Verify the MCP port is not blocked by firewall
