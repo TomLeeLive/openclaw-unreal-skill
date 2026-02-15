@@ -1,4 +1,5 @@
 # OpenClaw Unreal Plugin
+version: 1.0.0
 
 MCP skill for controlling Unreal Engine Editor via OpenClaw.
 
