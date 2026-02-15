@@ -2,9 +2,23 @@
 
 MCP skill for controlling Unreal Engine Editor via OpenClaw.
 
-## Connection
+## Connection Modes
 
-The plugin runs an MCP server inside the Unreal Editor. OpenClaw Gateway connects to it automatically when the editor is running with the plugin enabled.
+### Mode A: OpenClaw Gateway (Remote)
+The plugin connects to OpenClaw Gateway via HTTP polling. Works automatically when Gateway is running.
+
+### Mode B: MCP Direct (Claude Code / Cursor)
+The plugin runs an embedded HTTP server on port **27184**. Use the included MCP bridge:
+
+```bash
+# Claude Code
+claude mcp add unreal -- node /path/to/Plugins/OpenClaw/MCP~/index.js
+
+# Cursor — add to .cursor/mcp.json
+{"mcpServers":{"unreal":{"command":"node","args":["/path/to/Plugins/OpenClaw/MCP~/index.js"]}}}
+```
+
+Both modes run simultaneously.
 
 ## Editor Panel
 
