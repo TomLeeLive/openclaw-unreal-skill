@@ -55,3 +55,8 @@ See [SKILL.md](SKILL.md) for complete tool documentation.
 ## License
 
 MIT License
+
+## License
+
+This project has been licensed under [Apache-2.0](LICENSE) since its initial release.
+Copyright 2026 Tom Lee (TomLeeLive)
