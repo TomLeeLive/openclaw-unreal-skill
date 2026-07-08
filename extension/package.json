@@ -1,7 +1,7 @@
 {
   "name": "openclaw-unreal-plugin",
-  "version": "1.0.1",
-  "description": "OpenClaw Unreal Plugin \u2014 connect Unreal Engine 5.x Editor to OpenClaw",
+  "version": "1.0.2",
+  "description": "OpenClaw gateway extension for the Unreal Engine 5.x Editor bridge (installs into the OpenClaw gateway). Note: this is the gateway-side half \u2014 the Unreal Engine 5.x editor add-on is a separate install from github.com/TomLeeLive/openclaw-unreal-plugin.",
   "main": "index.ts",
   "type": "module",
   "author": "Tom Jaejoon Lee",
