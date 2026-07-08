@@ -1,12 +1,20 @@
 {
   "name": "unreal",
-  "version": "0.9.5",
-  "description": "OpenClaw Unreal Plugin - Connect UE5 to OpenClaw AI",
+  "version": "1.0.1",
+  "description": "OpenClaw Unreal Plugin \u2014 connect Unreal Engine 5.x Editor to OpenClaw",
   "main": "index.ts",
   "type": "module",
-  "author": "OpenClaw",
-  "license": "MIT",
+  "author": "Tom Jaejoon Lee",
+  "license": "Apache-2.0",
   "openclaw": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.1.0"
+    },
+    "build": {
+      "openclawVersion": "2026.3.37"
+    }
   }
 }
