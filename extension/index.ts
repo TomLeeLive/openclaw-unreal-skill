@@ -248,8 +248,20 @@ const plugin = {
     // Cleanup timer
     setInterval(cleanupStaleSessions, 30000);
     
-    // Register HTTP handler
-    api.registerHttpHandler(handleUnrealHttpRequest);
+    // Register HTTP handler.
+    // OpenClaw ≥2026.3 removed registerHttpHandler in favor of registerHttpRoute —
+    // support both so the plugin loads on old and new gateways.
+    const httpApi = api as any;
+    if (typeof httpApi.registerHttpRoute === "function") {
+      httpApi.registerHttpRoute({
+        path: "/unreal",
+        auth: "plugin",
+        match: "prefix",
+        handler: handleUnrealHttpRequest,
+      });
+    } else {
+      httpApi.registerHttpHandler(handleUnrealHttpRequest);
+    }
     
     // ===== Agent Tools =====
     
