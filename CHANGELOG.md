@@ -5,6 +5,16 @@ All notable changes to OpenClaw Unreal Skill will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-07-08
+
+### Added
+- Frontmatter metadata (name, version, description, `disableModelInvocation: true`)
+- Security & Privacy Disclosure section — HTTP server auth limitation, destructive-operation confirmation guidance, screenshot/log data visibility, safety defaults
+- License section (Apache-2.0)
+
+### Changed
+- Description now discloses full capability surface (actor deletion, console commands, input simulation, captures) and trusted-project guidance
+
 ## [1.0.0] - 2026-02-15
 
 ### Added
