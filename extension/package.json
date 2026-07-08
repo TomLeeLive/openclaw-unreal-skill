@@ -1,5 +1,5 @@
 {
-  "name": "unreal",
+  "name": "openclaw-unreal-plugin",
   "version": "1.0.1",
   "description": "OpenClaw Unreal Plugin \u2014 connect Unreal Engine 5.x Editor to OpenClaw",
   "main": "index.ts",
